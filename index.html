@@ -1,0 +1,545 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Horror House Escape</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: #000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+        canvas {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas"></canvas>
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // Game variables
+        let gameState = 'start';
+        let currentLevel = 1;
+        let scaleFactor = 1;
+        let imagesLoaded = { ghost: false, holyWater: false, key: false, door: false };
+        let showNextLevelMessage = false;
+        let nextLevelTimer = 0;
+        // Player object
+        const player = {
+            x: 1.5, y: 1.5, dirX: 1, dirY: 0, planeX: 0, planeY: 0.66,
+            moveSpeed: 0.1, rotSpeed: 0.05, size: 0.2, canThrow: true, throwCooldown: 1000
+        };
+
+        // Game objects
+        let ghosts = [{ x: 8.5, y: 8.5, speed: 0.03, stunned: false, stunTimer: 0, size: 0.5 }];
+        let holyWaterProjectiles = [];
+        let key = { x: 4.5, y: 4.5, found: false };
+        let doors = [];
+        const keys = { w: false, s: false, a: false, d: false, space: false };
+        const DOOR_TRIGGER_DISTANCE = 0.5;
+
+        // Level maps (extended to 7 levels)
+        const maps = {
+            1: [
+                [1,1,1,1,1,1,1,1,1,1],
+                [1,0,0,0,0,0,0,0,0,1],
+                [1,0,1,0,1,0,1,0,0,1],
+                [1,0,0,0,0,0,0,0,0,1],
+                [1,0,1,0,1,0,1,0,0,1],
+                [1,0,0,0,0,0,0,0,0,1],
+                [1,0,1,0,1,0,1,0,0,1],
+                [1,0,0,0,0,0,0,0,0,1],
+                [1,0,0,0,0,0,0,0,0,1],
+                [1,1,1,1,1,1,1,1,1,1]
+            ],
+            2: [
+                [1,1,1,1,1,1,1,1,1,1],
+                [1,0,0,0,0,0,0,0,0,1],
+                [1,0,1,1,0,1,1,0,0,1],
+                [1,0,0,0,0,0,0,0,0,1],
+                [1,0,1,1,0,1,0,1,0,1],
+                [1,0,0,0,0,0,0,0,0,1],
+                [1,0,1,0,1,0,1,0,0,1],
+                [1,0,0,0,0,0,0,0,0,1],
+                [1,0,0,0,0,0,0,0,0,1],
+                [1,1,1,1,1,1,1,1,1,1]
+            ],
+            3: [
+                [1,1,1,1,1,1,1,1,1,1],
+                [1,0,0,0,1,0,0,0,0,1],
+                [1,0,1,0,1,0,1,1,0,1],
+                [1,0,0,0,0,0,0,0,0,1],
+                [1,1,1,0,1,1,0,1,0,1],
+                [1,0,0,0,0,0,0,0,0,1],
+                [1,0,1,1,0,1,1,0,0,1],
+                [1,0,0,0,0,0,0,0,0,1],
+                [1,0,0,0,0,0,0,0,0,1],
+                [1,1,1,1,1,1,1,1,1,1]
+            ],
+            4: [
+                [1,1,1,1,1,1,1,1,1,1],
+                [1,0,0,0,0,0,0,0,0,1],
+                [1,0,1,1,1,0,1,0,0,1],
+                [1,0,0,0,1,0,0,0,0,1],
+                [1,0,1,0,1,1,0,1,0,1],
+                [1,0,0,0,0,0,0,0,0,1],
+                [1,0,1,0,1,0,1,1,0,1],
+                [1,0,0,0,0,0,0,0,0,1],
+                [1,0,0,0,0,0,0,0,0,1],
+                [1,1,1,1,1,1,1,1,1,1]
+            ],
+            5: [
+                [1,1,1,1,1,1,1,1,1,1],
+                [1,0,0,0,0,0,0,0,0,1],
+                [1,0,1,0,1,1,1,0,0,1],
+                [1,0,0,0,0,0,0,0,0,1],
+                [1,1,0,1,1,0,1,0,1,1],
+                [1,0,0,0,0,0,0,0,0,1],
+                [1,0,1,1,0,1,0,1,0,1],
+                [1,0,0,0,0,0,0,0,0,1],
+                [1,0,0,0,0,0,0,0,0,1],
+                [1,1,1,1,1,1,1,1,1,1]
+            ],
+            6: [
+                [1,1,1,1,1,1,1,1,1,1],
+                [1,0,0,0,0,0,0,0,0,1],
+                [1,0,1,1,0,1,0,1,0,1],
+                [1,0,0,0,0,0,0,0,0,1],
+                [1,1,0,1,1,1,0,1,1,1],
+                [1,0,0,0,0,0,0,0,0,1],
+                [1,0,1,0,1,0,1,0,0,1],
+                [1,0,0,0,0,0,0,0,0,1],
+                [1,0,0,0,0,0,0,0,0,1],
+                [1,1,1,1,1,1,1,1,1,1]
+            ],
+            7: [
+                [1,1,1,1,1,1,1,1,1,1],
+                [1,0,0,0,0,0,0,0,0,1],
+                [1,0,1,1,1,1,1,0,0,1],
+                [1,0,0,0,0,0,0,0,0,1],
+                [1,1,0,1,0,1,0,1,0,1],
+                [1,0,0,0,0,0,0,0,0,1],
+                [1,0,1,0,1,0,1,1,0,1],
+                [1,0,0,0,0,0,0,0,0,1],
+                [1,0,0,0,0,0,0,0,0,1],
+                [1,1,1,1,1,1,1,1,1,1]
+            ]
+        };
+
+        let currentMap = maps[1];
+
+        // Load sprites
+        const ghostImage = new Image();
+        const holyWaterImage = new Image();
+        const keyImage = new Image();
+        const doorImage = new Image();
+        ghostImage.src = 'Ghost_generated_image-removebg-preview.png';
+        holyWaterImage.src = 'Holywater-generated_image-removebg-preview.png';
+        keyImage.src = 'key_image-removebg-preview.png';
+        doorImage.src = 'opened-white-door-isolated-on-transparent-background-png.webp';
+
+        ghostImage.onload = () => { imagesLoaded.ghost = true; };
+        holyWaterImage.onload = () => { imagesLoaded.holyWater = true; };
+        keyImage.onload = () => { imagesLoaded.key = true; };
+        doorImage.onload = () => { imagesLoaded.door = true; };
+
+        // Canvas sizing
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            scaleFactor = Math.min(canvas.width / 800, canvas.height / 600);
+        }
+
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        // Input handling
+        document.addEventListener('keydown', (e) => {
+            if (gameState === 'start') init();
+            switch(e.key.toLowerCase()) {
+                case 'w': keys.w = true; break;
+                case 's': keys.s = true; break;
+                case 'a': keys.a = true; break;
+                case 'd': keys.d = true; break;
+                case ' ': keys.space = true; fireHolyWater(); break;
+            }
+        });
+
+        document.addEventListener('keyup', (e) => {
+            switch(e.key.toLowerCase()) {
+                case 'w': keys.w = false; break;
+                case 's': keys.s = false; break;
+                case 'a': keys.a = false; break;
+                case 'd': keys.d = false; break;
+                case ' ': keys.space = false; break;
+            }
+        });
+
+        document.addEventListener('mousemove', (e) => {
+            if (gameState === 'playing' && document.pointerLockElement === canvas) {
+                const rotSpeed = e.movementX * 0.002;
+                const oldDirX = player.dirX;
+                player.dirX = player.dirX * Math.cos(rotSpeed) - player.dirY * Math.sin(rotSpeed);
+                player.dirY = oldDirX * Math.sin(rotSpeed) + player.dirY * Math.cos(rotSpeed);
+                const oldPlaneX = player.planeX;
+                player.planeX = player.planeX * Math.cos(rotSpeed) - player.planeY * Math.sin(rotSpeed);
+                player.planeY = oldPlaneX * Math.sin(rotSpeed) + player.planeY * Math.cos(rotSpeed);
+            }
+        });
+
+        canvas.requestPointerLock = canvas.requestPointerLock || canvas.mozRequestPointerLock;
+        canvas.onclick = () => {
+            if (gameState === 'playing') canvas.requestPointerLock();
+        };
+
+        function init() {
+            player.x = 1.5;
+            player.y = 1.5;
+            player.dirX = 1;
+            player.dirY = 0;
+            player.planeX = 0;
+            player.planeY = 0.66;
+            holyWaterProjectiles = [];
+            key.found = false;
+            ghosts = currentLevel === 1 ? 
+                [{ x: 8.5, y: 8.5, speed: 0.03, stunned: false, stunTimer: 0, size: 0.5 }] :
+                [
+                    { x: 8.5, y: 8.5, speed: 0.03, stunned: false, stunTimer: 0, size: 0.5 },
+                    { x: 7.5, y: 7.5, speed: 0.03, stunned: false, stunTimer: 0, size: 0.5 }
+                ];
+            currentMap = maps[currentLevel];
+            setupLevel();
+            gameState = 'playing';
+            showNextLevelMessage = false;
+            randomizePositions();
+        }
+
+        function setupLevel() {
+            doors = [];
+            if (currentLevel === 1) {
+                doors.push({ x: 9, y: 5, opened: false, isExit: true });
+                doors.push({ x: 9, y: 7, opened: false, isExit: false });
+            } else {
+                doors.push({ x: 9, y: 5, opened: false, isExit: true });
+            }
+        }
+
+        function randomizePositions() {
+            let emptyCells = [];
+            for (let y = 1; y < 9; y++) {
+                for (let x = 1; x < 9; x++) {
+                    if (currentMap[y][x] === 0 && !doors.some(d => x === d.x - 0.5 && y === d.y - 0.5)) {
+                        emptyCells.push({ x: x + 0.5, y: y + 0.5 });
+                    }
+                }
+            }
+            emptyCells = emptyCells.sort(() => Math.random() - 0.5);
+            key.x = emptyCells[0].x;
+            key.y = emptyCells[0].y;
+            ghosts[0].x = emptyCells[1].x;
+            ghosts[0].y = emptyCells[1].y;
+            if (currentLevel > 1 && emptyCells.length > 2) {
+                ghosts[1].x = emptyCells[2].x;
+                ghosts[1].y = emptyCells[2].y;
+            }
+        }
+
+        function isCollision(x, y, size = 0.2) {
+            const mapX = Math.floor(x);
+            const mapY = Math.floor(y);
+            return (currentMap[mapY][mapX] === 1 ||
+                    currentMap[mapY][Math.floor(x + size)] === 1 ||
+                    currentMap[mapY][Math.floor(x - size)] === 1 ||
+                    currentMap[Math.floor(y + size)][mapX] === 1 ||
+                    currentMap[Math.floor(y - size)][mapX] === 1);
+        }
+
+        function fireHolyWater() {
+            if (gameState === 'playing' && player.canThrow) {
+                holyWaterProjectiles.push({
+                    x: player.x, y: player.y,
+                    dirX: player.dirX, dirY: player.dirY,
+                    speed: 0.2
+                });
+                player.canThrow = false;
+                setTimeout(() => player.canThrow = true, player.throwCooldown);
+            }
+        }
+
+        function update() {
+            if (gameState !== 'playing') return;
+
+            // Handle next level transition
+            if (showNextLevelMessage) {
+                nextLevelTimer--;
+                if (nextLevelTimer <= 0) {
+                    init();
+                }
+                return;
+            }
+
+            // Player movement
+            let moveX = 0;
+            let moveY = 0;
+
+            if (keys.w) { moveX += player.dirX * player.moveSpeed; moveY += player.dirY * player.moveSpeed; }
+            if (keys.s) { moveX -= player.dirX * player.moveSpeed; moveY -= player.dirY * player.moveSpeed; }
+            if (keys.a) { moveX -= player.planeX * player.moveSpeed; moveY -= player.planeY * player.moveSpeed; }
+            if (keys.d) { moveX += player.planeX * player.moveSpeed; moveY += player.planeY * player.moveSpeed; }
+
+            const newX = player.x + moveX;
+            const newY = player.y + moveY;
+            if (!isCollision(newX, player.y)) player.x = newX;
+            if (!isCollision(player.x, newY)) player.y = newY;
+
+            // Update holy water projectiles
+            for (let i = holyWaterProjectiles.length - 1; i >= 0; i--) {
+                const p = holyWaterProjectiles[i];
+                p.x += p.dirX * p.speed;
+                p.y += p.dirY * p.speed;
+
+                for (let ghost of ghosts) {
+                    const dx = ghost.x - p.x;
+                    const dy = ghost.y - p.y;
+                    if (dx * dx + dy * dy < ghost.size * ghost.size && !ghost.stunned) {
+                        ghost.stunned = true;
+                        ghost.stunTimer = 180;
+                        holyWaterProjectiles.splice(i, 1);
+                        break;
+                    }
+                }
+                if (isCollision(p.x, p.y, 0.1)) {
+                    holyWaterProjectiles.splice(i, 1);
+                }
+            }
+
+            // Ghosts movement
+            for (let ghost of ghosts) {
+                if (!ghost.stunned) {
+                    const dx = player.x - ghost.x;
+                    const dy = player.y - ghost.y;
+                    const distance = Math.sqrt(dx * dx + dy * dy);
+                    if (distance > 0) {
+                        const moveX = (dx / distance) * ghost.speed;
+                        const moveY = (dy / distance) * ghost.speed;
+                        if (!isCollision(ghost.x + moveX, ghost.y)) ghost.x += moveX;
+                        if (!isCollision(ghost.x, ghost.y + moveY)) ghost.y += moveY;
+                    }
+                    if (distance < player.size + ghost.size) {
+                        gameState = 'gameOver';
+                        setTimeout(() => gameState = 'start', 2000);
+                    }
+                } else if (--ghost.stunTimer <= 0) {
+                    ghost.stunned = false;
+                }
+            }
+
+            // Check key and doors
+            if (!key.found && Math.sqrt((player.x - key.x) ** 2 + (player.y - key.y) ** 2) < player.size) {
+                key.found = true;
+            }
+            if (key.found) {
+                for (let door of doors) {
+                    if (!door.opened && Math.sqrt((player.x - door.x) ** 2 + (player.y - door.y) ** 2) < DOOR_TRIGGER_DISTANCE) {
+                        door.opened = true;
+                        if (door.isExit) {
+                            if (currentLevel < 7) {
+                                currentLevel++;
+                                showNextLevelMessage = true;
+                                nextLevelTimer = 60; // Show message for about 1 second (60 frames)
+                            } else {
+                                gameState = 'won';
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        function renderSpriteFallback(x, y, size, color, transformY, spriteScreenX) {
+            const spriteHeight = Math.abs(Math.floor(canvas.height / (transformY || 0.1))) * size;
+            const drawStartY = Math.max(0, -spriteHeight / 2 + canvas.height / 2);
+            const drawEndY = Math.min(canvas.height, spriteHeight / 2 + canvas.height / 2);
+            const spriteWidth = Math.abs(Math.floor(spriteHeight));
+            const drawStartX = Math.max(0, -spriteWidth / 2 + spriteScreenX);
+            const drawEndX = Math.min(canvas.width, spriteWidth / 2 + spriteScreenX);
+
+            ctx.beginPath();
+            ctx.arc((drawStartX + drawEndX) / 2, (drawStartY + drawEndY) / 2,
+                    (drawEndX - drawStartX) / 2, 0, Math.PI * 2);
+            ctx.fillStyle = color;
+            ctx.fill();
+        }
+
+        function render() {
+            ctx.fillStyle = '#000';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            if (gameState === 'start') {
+                ctx.fillStyle = 'white';
+                ctx.font = `${24 * scaleFactor}px Arial`;
+                ctx.textAlign = 'center';
+                ctx.fillText("You're now experiencing a different type of game", canvas.width / 2, canvas.height / 4);
+                ctx.fillText("without any sounds, only visuals", canvas.width / 2, canvas.height / 3);
+                ctx.fillText('Horror House Escape', canvas.width / 2, canvas.height / 2);
+                ctx.fillText('WASD: Move | Mouse: Look | Space: Holy Water', canvas.width / 2, canvas.height * 2 / 3);
+                ctx.fillText('Press any key to start', canvas.width / 2, canvas.height * 3 / 4);
+                return;
+            }
+
+            if (gameState === 'gameOver') {
+                ctx.fillStyle = 'red';
+                ctx.font = `${24 * scaleFactor}px Arial`;
+                ctx.textAlign = 'center';
+                ctx.fillText('Game Over!', canvas.width / 2, canvas.height / 2);
+                return;
+            }
+
+            if (gameState === 'won') {
+                ctx.fillStyle = 'green';
+                ctx.font = `${24 * scaleFactor}px Arial`;
+                ctx.textAlign = 'center';
+                ctx.fillText("You've Escaped the Horror House!", canvas.width / 2, canvas.height / 2);
+                setTimeout(() => { currentLevel = 1; gameState = 'start'; }, 2000);
+                return;
+            }
+
+            // Draw sky and floor
+            ctx.fillStyle = '#2a2a5e';
+            ctx.fillRect(0, 0, canvas.width, canvas.height / 2);
+            ctx.fillStyle = '#404040';
+            ctx.fillRect(0, canvas.height / 2, canvas.width, canvas.height);
+
+            // Raycasting
+            for (let x = 0; x < canvas.width; x++) {
+                const cameraX = 2 * x / canvas.width - 1;
+                const rayDirX = player.dirX + player.planeX * cameraX;
+                const rayDirY = player.dirY + player.planeY * cameraX;
+
+                let mapX = Math.floor(player.x);
+                let mapY = Math.floor(player.y);
+
+                const deltaDistX = Math.abs(1 / rayDirX) || 1;
+                const deltaDistY = Math.abs(1 / rayDirY) || 1;
+
+                let stepX, stepY, sideDistX, sideDistY;
+                if (rayDirX < 0) { stepX = -1; sideDistX = (player.x - mapX) * deltaDistX; }
+                else { stepX = 1; sideDistX = (mapX + 1 - player.x) * deltaDistX; }
+                if (rayDirY < 0) { stepY = -1; sideDistY = (player.y - mapY) * deltaDistY; }
+                else { stepY = 1; sideDistY = (mapY + 1 - player.y) * deltaDistY; }
+
+                let hit = 0, side;
+                while (!hit) {
+                    if (sideDistX < sideDistY) {
+                        sideDistX += deltaDistX;
+                        mapX += stepX;
+                        side = 0;
+                    } else {
+                        sideDistY += deltaDistY;
+                        mapY += stepY;
+                        side = 1;
+                    }
+                    if (mapY >= 0 && mapY < currentMap.length && mapX >= 0 && mapX < currentMap[0].length) {
+                        if (currentMap[mapY][mapX] > 0) hit = 1;
+                    } else {
+                        hit = 1;
+                    }
+                }
+
+                const perpWallDist = side === 0 ?
+                    (mapX - player.x + (1 - stepX) / 2) / rayDirX :
+                    (mapY - player.y + (1 - stepY) / 2) / rayDirY;
+
+                const lineHeight = Math.abs(Math.floor(canvas.height / (perpWallDist || 0.1)));
+                const drawStart = Math.max(0, -lineHeight / 2 + canvas.height / 2);
+                const drawEnd = Math.min(canvas.height, lineHeight / 2 + canvas.height / 2);
+
+                ctx.fillStyle = side === 0 ? '#8b4513' : '#5c2f0c';
+                ctx.fillRect(x, drawStart, 1, drawEnd - drawStart);
+            }
+
+            // Draw sprites
+            const sprites = [
+                ...holyWaterProjectiles.map(p => ({
+                    x: p.x, y: p.y, img: imagesLoaded.holyWater ? holyWaterImage : null,
+                    size: 0.2, fallbackColor: 'blue'
+                })),
+                !key.found ? {
+                    x: key.x, y: key.y, img: imagesLoaded.key ? keyImage : null,
+                    size: 0.2, fallbackColor: 'yellow'
+                } : null,
+                ...doors.filter(d => key.found && !d.opened).map(d => ({
+                    x: d.x, y: d.y, img: imagesLoaded.door ? doorImage : null,
+                    size: 0.5, fallbackColor: 'brown'
+                })),
+                ...ghosts.map(ghost => ({
+                    x: ghost.x, y: ghost.y, img: imagesLoaded.ghost ? ghostImage : null,
+                    size: ghost.size, fallbackColor: ghost.stunned ? 'gray' : 'white'
+                }))
+            ].filter(Boolean);
+
+            sprites.sort((a, b) => {
+                const distA = (player.x - a.x) ** 2 + (player.y - a.y) ** 2;
+                const distB = (player.x - b.x) ** 2 + (player.y - b.y) ** 2;
+                return distB - distA;
+            });
+
+            for (const sprite of sprites) {
+                const spriteX = sprite.x - player.x;
+                const spriteY = sprite.y - player.y;
+                const invDet = 1.0 / (player.planeX * player.dirY - player.dirX * player.planeY);
+                const transformX = invDet * (player.dirY * spriteX - player.dirX * spriteY);
+                const transformY = invDet * (-player.planeY * spriteX + player.planeX * spriteY);
+
+                if (transformY <= 0) continue;
+                const spriteScreenX = Math.floor((canvas.width / 2) * (1 + transformX / transformY));
+
+                if (sprite.img && sprite.img.complete && sprite.img.naturalWidth !== 0) {
+                    const spriteHeight = Math.abs(Math.floor(canvas.height / transformY)) * sprite.size;
+                    const drawStartY = Math.max(0, -spriteHeight / 2 + canvas.height / 2);
+                    const drawEndY = Math.min(canvas.height, spriteHeight / 2 + canvas.height / 2);
+                    const spriteWidth = Math.abs(Math.floor(spriteHeight * sprite.img.width / sprite.img.height));
+                    const drawStartX = Math.max(0, -spriteWidth / 2 + spriteScreenX);
+                    const drawEndX = Math.min(canvas.width, spriteWidth / 2 + spriteScreenX);
+
+                    ctx.drawImage(sprite.img, drawStartX, drawStartY,
+                                drawEndX - drawStartX, drawEndY - drawStartY);
+                } else {
+                    renderSpriteFallback(sprite.x, sprite.y, sprite.size, sprite.fallbackColor,
+                                        transformY, spriteScreenX);
+                }
+            }
+
+            // Display current level in upper middle
+            ctx.fillStyle = 'white';
+            ctx.font = `${20 * scaleFactor}px Arial`;
+            ctx.textAlign = 'center';
+            ctx.fillText(`Level ${currentLevel}`, canvas.width / 2, 30 * scaleFactor);
+
+            // Display "Next Level" message
+            if (showNextLevelMessage) {
+                ctx.fillStyle = 'green';
+                ctx.font = `${36 * scaleFactor}px Arial`;
+                ctx.fillText('Next Level!', canvas.width / 2, canvas.height / 2);
+            }
+        }
+
+        function gameLoop() {
+            update();
+            render();
+            requestAnimationFrame(gameLoop);
+        }
+
+        gameLoop();
+    </script>
+</body>
+</html>
