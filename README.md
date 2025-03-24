@@ -6,4 +6,6 @@ JavaScript,
 seven levels with increasing difficulty, Players find key to unlock door and progress, 
 with no sound and basic sprite-based graphics
 
+images i used in this are grok ai generated
+
 if you want you can take the code and generate your own game 
